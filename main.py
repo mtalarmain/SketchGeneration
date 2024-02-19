@@ -7,6 +7,8 @@ from PIL import Image
 import gradio as gr
 import os 
 
+if not os.path.exists('generation'):
+    os.makedirs(f'generation')
 
 def text_2_sketch(prompt, steps_slider_sketch):
 
