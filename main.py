@@ -10,13 +10,34 @@ import os
 if not os.path.exists('generation'):
     os.makedirs(f'generation')
 
+controlnet = ControlNetModel.from_pretrained("diffusers/controlnet-canny-sdxl-1.0", torch_dtype=torch.float16)
+vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
+pipe_sdxl_controlnet = StableDiffusionXLControlNetPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", controlnet=controlnet, vae=vae, torch_dtype=torch.float16)
+pipe_sdxl_controlnet.enable_model_cpu_offload()
+
+pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
+pipe_refiner.to("cuda")
+
+pipe = DiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", safety_checker = None, requires_safety_checker = False)
+pipe.load_lora_weights("MdEndan/stable-diffusion-lora-fine-tuned")
+pipe = pipe.to("cuda")
+
+def clean_sketch(img):
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    img = (255-img) # inverse black and white
+    kernel = np.ones((5,5),np.uint8)
+    erosion = cv2.erode(img,kernel,iterations = 1)  # Thinner objects
+    ret3,erosion = cv2.threshold(erosion,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)  # clean noise
+    erosion = (255-erosion) # inverse black and white
+    img_eroded = cv2.cvtColor(erosion, cv2.COLOR_GRAY2RGB)
+    return img_eroded
+
 def text_2_sketch(prompt, steps_slider_sketch):
 
-    pipe = DiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", safety_checker = None, requires_safety_checker = False)
-    pipe.load_lora_weights("MdEndan/stable-diffusion-lora-fine-tuned")
-    pipe = pipe.to("cuda")
     images = pipe(prompt, num_inference_steps= steps_slider_sketch) 
     image = images.images[0].resize((1024,1024))
+    image.save("generation/blurry_sketch.png")
+    image = Image.fromarray(clean_sketch(np.asarray(image)))
     image.save("generation/sketch.png")
     return image
 
@@ -36,20 +57,14 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
     
     #Load Model
     controlnet_conditioning_scale = 0.5  # recommended for good generalization
-    controlnet = ControlNetModel.from_pretrained("diffusers/controlnet-canny-sdxl-1.0", torch_dtype=torch.float16)
-    vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
-    pipe = StableDiffusionXLControlNetPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", controlnet=controlnet, vae=vae, torch_dtype=torch.float16)
-    pipe.enable_model_cpu_offload()
     
     # Generate Image from sketch
-    image = pipe(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image).images[0]
+    image = pipe_sdxl_controlnet(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image).images[0]
     image.save("generation/img_generated.png")
     
     # Refine Image to have better image quality and consistencypipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
-    pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
-    pipe_refiner.to("cuda")
     image = pipe_refiner(prompt, image=image, negative_prompt=negative_prompt, strength=0.2).images[0]
-    image.save(f"generation/img_refined_{}.png")
+    image.save(f"generation/img_refined_{name_file}.png")
     return image
 
 def add_object(name, prompt):
@@ -78,7 +93,7 @@ with gr.Blocks() as demo:
             step=0.1,
         )
         additional_positive = gr.Textbox(
-            value = "realistic picture, best quality, 4k, 8k, ultra highres, raw photo in hdr, sharp focus",
+            value = "character, realistic picture, best quality, 4k, 8k, ultra highres, raw photo in hdr, sharp focus",
             label="Additional positive",
             info="Use this to insert custom styles or elements to the background",
             interactive=True,
