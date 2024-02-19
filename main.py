@@ -42,6 +42,12 @@ def text_2_sketch(prompt, steps_slider_sketch):
     return image
 
 def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image):
+
+    # Fix seed
+    seed = 42
+    generator = torch.Generator(device='cuda')
+    generator.manual_seed(seed)
+
     # Load Positive and Negative Prompts
     name_file = '_'.join(init_prompt.split(' ')[:5])
     prompt = str(init_prompt) + ', ' + str(positive_prompt)
@@ -54,16 +60,14 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
     image = image[:, :, None]
     image = np.concatenate([image, image, image], axis=2)
     canny_image = Image.fromarray(image)
-    
-    #Load Model
-    controlnet_conditioning_scale = 0.5  # recommended for good generalization
-    
+        
     # Generate Image from sketch
-    image = pipe_sdxl_controlnet(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image).images[0]
+    controlnet_conditioning_scale = 0.5  # recommended for good generalization
+    image = pipe_sdxl_controlnet(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image, generator = generator).images[0]
     image.save("generation/img_generated.png")
     
     # Refine Image to have better image quality and consistencypipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
-    image = pipe_refiner(prompt, image=image, negative_prompt=negative_prompt, strength=0.2).images[0]
+    image = pipe_refiner(prompt, image=image, negative_prompt=negative_prompt, strength=0.2, generator = generator).images[0]
     image.save(f"generation/img_refined_{name_file}.png")
     return image
 
