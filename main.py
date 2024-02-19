@@ -6,9 +6,26 @@ import cv2
 from PIL import Image
 import gradio as gr
 import os 
+from pathlib import Path
+import glob
+import json
 
 if not os.path.exists('generation'):
     os.makedirs(f'generation')
+
+def load_prompt_presets(path_img_style):
+    prompt_presets = {}
+    for preset_path in Path(path_img_style).glob('*'):
+        preset = json.loads(preset_path.read_text())
+        prompt_presets[preset_path.stem] = preset
+    return prompt_presets
+
+def presets(prompt_presets):
+    return list(prompt_presets.keys())
+
+path_img_style = './prompts/'
+prompt_presets = load_prompt_presets(path_img_style)
+preset_list = presets(prompt_presets)
 
 controlnet = ControlNetModel.from_pretrained("diffusers/controlnet-canny-sdxl-1.0", torch_dtype=torch.float16)
 vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
@@ -41,7 +58,7 @@ def text_2_sketch(prompt, steps_slider_sketch):
     image.save("generation/sketch.png")
     return image
 
-def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image, guidance_scale):
+def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image, guidance_scale, style_group):
 
     # Fix seed
     seed = 42
@@ -50,8 +67,15 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
 
     # Load Positive and Negative Prompts
     name_file = '_'.join(init_prompt.split(' ')[:5])
-    prompt = str(init_prompt) + ', ' + str(positive_prompt)
-    negative_prompt = str(negative_prompt)
+    img_style_prompt = prompt_presets[style_group]
+    if str(positive_prompt) != "":
+        prompt = str(init_prompt)+ ', ' + img_style_prompt['positive'] + ', ' + str(positive_prompt)
+    else:
+        prompt = str(init_prompt)+ ', ' + img_style_prompt['positive']
+    if str(negative_prompt) != "":
+        negative_prompt = img_style_prompt['negative'] + ', ' +str(negative_prompt)
+    else:
+        negative_prompt = img_style_prompt['negative']
     
     #From Sketch Image to Canny Image
     image = cv2.imread('generation/sketch.png')
@@ -88,14 +112,20 @@ with gr.Blocks() as demo:
         image = gr.Image(label = 'Final generated image.')
 
     with gr.Accordion("Advanced", open=False):
+        style_group = gr.Radio(
+            label="Image style",
+            choices=preset_list,
+            interactive=True,
+            value="Realistic"
+        )
         additional_positive = gr.Textbox(
-            value = "character, realistic picture, best quality, 4k, 8k, ultra highres, raw photo in hdr, sharp focus",
+            value = "character",
             label="Additional positive",
             info="Use this to insert custom styles or elements to the background",
             interactive=True,
         )
         additional_negative = gr.Textbox(
-            value="worst quality, low quality, normal quality, child, painting, drawing, sketch, cartoon, anime, render, blurry",
+            #value="worst quality, low quality, normal quality, child, painting, drawing, sketch, cartoon, anime, render, blurry",
             label="Additional negative",
             info="Use this to specify additional elements or styles that "
                     "you don't want to appear in the image",
@@ -142,5 +172,5 @@ with gr.Blocks() as demo:
         b1 = gr.Button("Generate Sketch")
         b1.click(text_2_sketch, inputs=[text, steps_slider_sketch], outputs=sketch)
         b2 = gr.Button("Generate Image")
-        b2.click(sketch_2_image, inputs=[text, additional_positive, additional_negative, strength, steps_slider_image, guidance_scale], outputs=image)
+        b2.click(sketch_2_image, inputs=[text, additional_positive, additional_negative, strength, steps_slider_image, guidance_scale, style_group], outputs=image)
 demo.launch(server_name='158.109.8.123')
