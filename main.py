@@ -22,6 +22,7 @@ def text_2_sketch(prompt, steps_slider_sketch):
 
 def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image):
     # Load Positive and Negative Prompts
+    name_file = '_'.join(init_prompt.split(' ')[:5])
     prompt = str(init_prompt) + ', ' + str(positive_prompt)
     negative_prompt = str(negative_prompt)
     
@@ -48,7 +49,7 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
     pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
     pipe_refiner.to("cuda")
     image = pipe_refiner(prompt, image=image, negative_prompt=negative_prompt, strength=0.2).images[0]
-    image.save("generation/img_refined.png")
+    image.save(f"generation/img_refined_{}.png")
     return image
 
 def add_object(name, prompt):
