@@ -41,7 +41,7 @@ def text_2_sketch(prompt, steps_slider_sketch):
     image.save("generation/sketch.png")
     return image
 
-def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image):
+def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image, guidance_scale):
 
     # Fix seed
     seed = 42
@@ -63,11 +63,11 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
         
     # Generate Image from sketch
     controlnet_conditioning_scale = 0.5  # recommended for good generalization
-    image = pipe_sdxl_controlnet(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image, generator = generator).images[0]
+    image = pipe_sdxl_controlnet(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image, generator = generator, num_inference_steps=steps_slider_image, guidance_scale=guidance_scale).images[0]
     image.save("generation/img_generated.png")
     
     # Refine Image to have better image quality and consistencypipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
-    image = pipe_refiner(prompt, image=image, negative_prompt=negative_prompt, strength=0.2, generator = generator).images[0]
+    image = pipe_refiner(prompt, image=image, negative_prompt=negative_prompt, strength=strength, generator = generator).images[0]
     image.save(f"generation/img_refined_{name_file}.png")
     return image
 
@@ -88,14 +88,6 @@ with gr.Blocks() as demo:
         image = gr.Image(label = 'Final generated image.')
 
     with gr.Accordion("Advanced", open=False):
-        strength = gr.Slider(
-            label="Strength refiner",
-            interactive=True,
-            minimum=0,
-            maximum=1,
-            value=0.2,
-            step=0.1,
-        )
         additional_positive = gr.Textbox(
             value = "character, realistic picture, best quality, 4k, 8k, ultra highres, raw photo in hdr, sharp focus",
             label="Additional positive",
@@ -129,10 +121,26 @@ with gr.Blocks() as demo:
             value=50,
             step=1,
         )
+        strength = gr.Slider(
+            label="Strength refiner",
+            interactive=True,
+            minimum=0,
+            maximum=1,
+            value=0.2,
+            step=0.1,
+        )
+        guidance_scale = gr.Slider(
+            label="Guidance Scale",
+            interactive=True,
+            minimum=0,
+            maximum=10,
+            value=5.0,
+            step=0.5,
+        )
 
     with gr.Row():
         b1 = gr.Button("Generate Sketch")
         b1.click(text_2_sketch, inputs=[text, steps_slider_sketch], outputs=sketch)
         b2 = gr.Button("Generate Image")
-        b2.click(sketch_2_image, inputs=[text, additional_positive, additional_negative, strength, steps_slider_image], outputs=image)
+        b2.click(sketch_2_image, inputs=[text, additional_positive, additional_negative, strength, steps_slider_image, guidance_scale], outputs=image)
 demo.launch(server_name='158.109.8.123')
