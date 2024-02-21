@@ -1,15 +1,21 @@
-from diffusers import DiffusionPipeline, StableDiffusionXLControlNetPipeline, StableDiffusionXLImg2ImgPipeline, ControlNetModel, AutoencoderKL, StableDiffusionImg2ImgPipeline, StableDiffusionControlNetPipeline, UniPCMultistepScheduler
-#from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler
-from diffusers.utils import load_image
+import argparse
+import json
+import os
+from pathlib import Path
+
+import cv2
+import gradio as gr
 import numpy as np
 import torch
-import cv2
+from diffusers import (
+    AutoencoderKL,
+    ControlNetModel,
+    DiffusionPipeline,
+    StableDiffusionXLControlNetPipeline,
+    StableDiffusionXLImg2ImgPipeline,
+)
 from PIL import Image
-import gradio as gr
-import os 
-from pathlib import Path
-import glob
-import json
+
 
 if not os.path.exists('generation'):
     os.makedirs(f'generation')
@@ -28,20 +34,10 @@ path_img_style = './prompts/'
 prompt_presets = load_prompt_presets(path_img_style)
 preset_list = presets(prompt_presets)
 
-controlnet = ControlNetModel.from_pretrained(
-    "lllyasviel/sd-controlnet-canny", torch_dtype=torch.float16
-)
-pipe_sdxl_controlnet = StableDiffusionControlNetPipeline.from_pretrained(
-    "runwayml/stable-diffusion-v1-5", controlnet=controlnet, safety_checker=None, torch_dtype=torch.float16
-)
-pipe_sdxl_controlnet.scheduler = UniPCMultistepScheduler.from_config(pipe_sdxl_controlnet.scheduler.config)
-#pipe_sdxl_controlnet.enable_xformers_memory_efficient_attention()
+controlnet = ControlNetModel.from_pretrained("diffusers/controlnet-canny-sdxl-1.0", torch_dtype=torch.float16)
+vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
+pipe_sdxl_controlnet = StableDiffusionXLControlNetPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", controlnet=controlnet, vae=vae, torch_dtype=torch.float16)
 pipe_sdxl_controlnet.enable_model_cpu_offload()
-
-#pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
-#pipe_refiner.to("cuda")
-pipe_refiner = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-2-depth")
-pipe_refiner.to("cuda")
 
 pipe = DiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", safety_checker = None, requires_safety_checker = False)
 pipe.load_lora_weights("MdEndan/stable-diffusion-lora-fine-tuned")
@@ -59,7 +55,8 @@ def clean_sketch(img):
 
 def text_2_sketch(prompt, steps_slider_sketch):
 
-    image = pipe(prompt, num_inference_steps= steps_slider_sketch).images[0]
+    images = pipe(prompt, num_inference_steps= steps_slider_sketch) 
+    image = images.images[0].resize((1024,1024))
     image.save("generation/blurry_sketch.png")
     image = Image.fromarray(clean_sketch(np.asarray(image)))
     image.save("generation/sketch.png")
@@ -96,10 +93,15 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
     controlnet_conditioning_scale = 0.5  # recommended for good generalization
     image = pipe_sdxl_controlnet(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image, generator = generator, num_inference_steps=steps_slider_image, guidance_scale=guidance_scale).images[0]
     image.save("generation/img_generated.png")
-    #image = image.resize((1024,1024))
+
+    image = np.array(image)
+    image = cv2.Canny(image, 100, 200)
+    image = image[:, :, None]
+    image = np.concatenate([image, image, image], axis=2)
+    canny_image = Image.fromarray(image)
     
     # Refine Image to have better image quality and consistencypipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
-    image = pipe_refiner(prompt, image=image, negative_prompt=negative_prompt, strength=strength, generator = generator).images[0]
+    image = pipe_sdxl_controlnet(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image, negative_prompt=negative_prompt, num_inference_steps=steps_slider_image*strength, generator = generator, guidance_scale=guidance_scale).images[0]
     image.save(f"generation/img_refined_{name_file}.png")
     return image
 
@@ -197,4 +199,12 @@ with gr.Blocks() as demo:
     b_sketch = gr.Button("Save Sketch")
     b_sketch.click(download_changes, inputs=sketch, outputs=sketch)
 
-demo.launch(server_name='158.109.8.123')
+
+ap = argparse.ArgumentParser()
+ap.add_argument(
+    "--server-name",
+    default="127.0.0.1"
+)
+args = ap.parse_args()
+
+demo.launch(server_name=args.server_name)
