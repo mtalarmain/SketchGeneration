@@ -27,24 +27,64 @@ def load_prompt_presets(path_img_style):
         prompt_presets[preset_path.stem] = preset
     return prompt_presets
 
-def presets(prompt_presets):
-    return list(prompt_presets.keys())
-
 path_img_style = './prompts/'
 prompt_presets = load_prompt_presets(path_img_style)
-preset_list = presets(prompt_presets)
+preset_list = list(prompt_presets.keys())
 
-controlnet = ControlNetModel.from_pretrained("diffusers/controlnet-canny-sdxl-1.0", torch_dtype=torch.float16)
-vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
-pipe_sdxl_controlnet = StableDiffusionXLControlNetPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", controlnet=controlnet, vae=vae, torch_dtype=torch.float16)
+# Load models
+# device = "cuda"
+# max_memory = {0: "15GiB", "cpu": "7GiB"}
+controlnet = ControlNetModel.from_pretrained(
+    "diffusers/controlnet-canny-sdxl-1.0",
+    torch_dtype=torch.float16,
+    variant="fp16",
+    use_safetensors=True,
+)
+vae = AutoencoderKL.from_pretrained(
+    "madebyollin/sdxl-vae-fp16-fix",
+    torch_dtype=torch.float16,
+    use_safetensors=True,
+)
+pipe_sdxl_controlnet = StableDiffusionXLControlNetPipeline.from_pretrained(
+    "stabilityai/stable-diffusion-xl-base-1.0",
+    controlnet=controlnet,
+    vae=vae,
+    torch_dtype=torch.float16,
+    variant="fp16",
+    use_safetensors=True,
+    # max_memory=max_memory,
+    # offload_folder="./offload/",
+    offload_state_dict=True,
+)
 pipe_sdxl_controlnet.enable_model_cpu_offload()
+pipe_sdxl_controlnet.enable_xformers_memory_efficient_attention()
 
-pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
-pipe_refiner.to("cuda")
+pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained(
+    "stabilityai/stable-diffusion-xl-refiner-1.0",
+    torch_dtype=torch.float16,
+    variant="fp16",
+    use_safetensors=True,
+    # max_memory=max_memory,
+    # offload_folder="./offload/",
+    offload_state_dict=True,
+)
+pipe_refiner.enable_model_cpu_offload()
+pipe_refiner.enable_xformers_memory_efficient_attention()
 
-pipe = DiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", safety_checker = None, requires_safety_checker = False)
+pipe = DiffusionPipeline.from_pretrained(
+    "CompVis/stable-diffusion-v1-4",
+    torch_dtype=torch.float16,
+    variant="fp16",
+    use_safetensors=True,
+    safety_checker=None,
+    requires_safety_checker=False,
+    # max_memory=max_memory,
+    # offload_folder="./offload/",
+    offload_state_dict=True,
+)
 pipe.load_lora_weights("MdEndan/stable-diffusion-lora-fine-tuned")
-pipe = pipe.to("cuda")
+pipe.enable_model_cpu_offload()
+pipe.enable_xformers_memory_efficient_attention()
 
 def clean_sketch(img):
     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
@@ -57,7 +97,6 @@ def clean_sketch(img):
     return img_eroded
 
 def text_2_sketch(prompt, steps_slider_sketch):
-
     images = pipe(prompt, num_inference_steps= steps_slider_sketch) 
     image = images.images[0].resize((1024,1024))
     image.save("generation/blurry_sketch.png")
@@ -66,7 +105,6 @@ def text_2_sketch(prompt, steps_slider_sketch):
     return image
 
 def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image, guidance_scale, style_group):
-
     # Fix seed
     seed = 42
     generator = torch.Generator(device='cuda')
