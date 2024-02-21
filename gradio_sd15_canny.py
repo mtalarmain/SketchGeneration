@@ -14,6 +14,27 @@ from diffusers import (ControlNetModel, DiffusionPipeline,
 from PIL import Image
 
 
+# Parse args
+ap = argparse.ArgumentParser()
+ap.add_argument(
+    "--server-name",
+    default="127.0.0.1"
+)
+ap.add_argument(
+    "--camera-device",
+    default=-1,
+    type=int,
+)
+args = ap.parse_args()
+server_name = args.server_name
+camera_device = args.camera_device
+
+# Capture camera
+if camera_device >= 0:
+    camera_capture = cv2.VideoCapture(camera_device)
+else:
+    camera_capture = None
+
 if not os.path.exists('generation'):
     os.makedirs(f'generation')
 
@@ -23,6 +44,44 @@ def load_prompt_presets(path_img_style):
         preset = json.loads(preset_path.read_text())
         prompt_presets[preset_path.stem] = preset
     return prompt_presets
+
+def get_camera_frame():
+    print(camera_capture)
+    # global lips_frame, frame, record, video_out, use_yolo
+    if camera_capture is None:
+        return None
+    
+    ok, frame = camera_capture.read()
+    h,w,c = frame.shape
+    print(ok, frame)
+
+    if not ok:
+        return None
+
+    # if use_yolo:
+    #     frame, lips_frame = predict_yolo(frame)
+    
+    # frame = cv2.rectangle(
+    #     frame,
+    #     (int(w*0.3),int(h*0.3)),
+    #     (int(w*0.7),int(h*0.7)),
+    #     (0,255,255),
+    #     1
+    # ) 
+
+    # if record:
+    #     if video_out is None:
+    #         print("Create video")
+    #         video_out = cv2.VideoWriter("output.mp4", cv2.VideoWriter_fourcc(*"mp4v"), video_out_fps, (w, h))
+    #     video_out.write(frame)
+    # else:
+    #     if video_out is not None:
+    #         print("Release video")
+    #         video_out.release()
+    #         video_out = None
+
+    print(frame.sum())
+    return frame[:,:,::-1]
 
 path_img_style = './prompts/'
 prompt_presets = load_prompt_presets(path_img_style)
@@ -46,8 +105,8 @@ pipe_controlnet = StableDiffusionControlNetPipeline.from_pretrained(
 pipe_controlnet.scheduler = UniPCMultistepScheduler.from_config(
     pipe_controlnet.scheduler.config
 )
-# pipe_controlnet.enable_xformers_memory_efficient_attention()
 pipe_controlnet.enable_model_cpu_offload()
+pipe_controlnet.enable_xformers_memory_efficient_attention()
 
 pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained(
     "stabilityai/stable-diffusion-xl-refiner-1.0",
@@ -57,7 +116,8 @@ pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained(
     cache_dir=cache_dir,
 )
 pipe_refiner.to("cuda")
-# pipe_refiner.enable_xformers_memory_efficient_attention()
+# pipe_refiner.enable_model_cpu_offload()
+pipe_refiner.enable_xformers_memory_efficient_attention()
 
 pipe = DiffusionPipeline.from_pretrained(
     "CompVis/stable-diffusion-v1-4",
@@ -70,8 +130,9 @@ pipe.load_lora_weights(
     "MdEndan/stable-diffusion-lora-fine-tuned",
     cache_dir=cache_dir,
 )
-# pipe.enable_xformers_memory_efficient_attention()
 pipe.to("cuda")
+# pipe.enable_model_cpu_offload()
+pipe.enable_xformers_memory_efficient_attention()
 
 
 def clean_sketch(img):
@@ -154,7 +215,8 @@ with gr.Blocks() as demo:
 
     with gr.Row():
         sketch = gr.ImageEditor(label = 'Sketch generated from text.', image_mode='RGB', interactive=True, brush=gr.components.image_editor.Brush( colors=["rgb(0, 0, 0)"],color_mode="fixed"))
-        video = gr.Video(label='Live recording')
+        # video = gr.Video(label='Live recording')
+        cam_img = gr.Image(get_camera_frame, label="Camera", every=0.0001)
         image = gr.Image(label = 'Final generated image.')
 
 
@@ -224,11 +286,5 @@ with gr.Blocks() as demo:
     b_sketch = gr.Button("Save Sketch")
     b_sketch.click(download_changes, inputs=sketch, outputs=sketch)
 
-ap = argparse.ArgumentParser()
-ap.add_argument(
-    "--server-name",
-    default="127.0.0.1"
-)
-args = ap.parse_args()
 
-demo.launch(server_name=args.server_name)
+demo.launch(server_name=server_name)

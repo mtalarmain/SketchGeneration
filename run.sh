@@ -1,0 +1,1 @@
+docker run --rm -it --gpus all --ipc host -v /home/labo/:/home/labo --device /dev/video0:/dev/video0 -v /dev/video0:/dev/video0 --net host -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix speech:v2 bash
