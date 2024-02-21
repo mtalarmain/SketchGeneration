@@ -1,15 +1,39 @@
-from diffusers import DiffusionPipeline, StableDiffusionXLControlNetPipeline, StableDiffusionXLImg2ImgPipeline, ControlNetModel, AutoencoderKL, StableDiffusionImg2ImgPipeline, StableDiffusionControlNetPipeline, UniPCMultistepScheduler
-#from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler
-from diffusers.utils import load_image
+import argparse
+import json
+import os
+from pathlib import Path
+
+import cv2
+import gradio as gr
 import numpy as np
 import torch
-import cv2
+from diffusers import (ControlNetModel, DiffusionPipeline,
+                       StableDiffusionControlNetPipeline,
+                       StableDiffusionXLImg2ImgPipeline,
+                       UniPCMultistepScheduler)
 from PIL import Image
-import gradio as gr
-import os 
-from pathlib import Path
-import glob
-import json
+
+
+# Parse args
+ap = argparse.ArgumentParser()
+ap.add_argument(
+    "--server-name",
+    default="127.0.0.1"
+)
+ap.add_argument(
+    "--camera-device",
+    default=-1,
+    type=int,
+)
+args = ap.parse_args()
+server_name = args.server_name
+camera_device = args.camera_device
+
+# Capture camera
+if camera_device >= 0:
+    camera_capture = cv2.VideoCapture(camera_device)
+else:
+    camera_capture = None
 
 if not os.path.exists('generation'):
     os.makedirs(f'generation')
@@ -21,31 +45,91 @@ def load_prompt_presets(path_img_style):
         prompt_presets[preset_path.stem] = preset
     return prompt_presets
 
-def presets(prompt_presets):
-    return list(prompt_presets.keys())
+def get_camera_frame():
+    print(camera_capture)
+    # global lips_frame, frame, record, video_out, use_yolo
+    if camera_capture is None:
+        return None
+    
+    ok, frame = camera_capture.read()
+    h,w,c = frame.shape
+    print(ok, frame)
+
+    if not ok:
+        return None
+
+    # if use_yolo:
+    #     frame, lips_frame = predict_yolo(frame)
+    
+    # frame = cv2.rectangle(
+    #     frame,
+    #     (int(w*0.3),int(h*0.3)),
+    #     (int(w*0.7),int(h*0.7)),
+    #     (0,255,255),
+    #     1
+    # ) 
+
+    # if record:
+    #     if video_out is None:
+    #         print("Create video")
+    #         video_out = cv2.VideoWriter("output.mp4", cv2.VideoWriter_fourcc(*"mp4v"), video_out_fps, (w, h))
+    #     video_out.write(frame)
+    # else:
+    #     if video_out is not None:
+    #         print("Release video")
+    #         video_out.release()
+    #         video_out = None
+
+    print(frame.sum())
+    return frame[:,:,::-1]
 
 path_img_style = './prompts/'
 prompt_presets = load_prompt_presets(path_img_style)
-preset_list = presets(prompt_presets)
+preset_list = list(prompt_presets.keys())
 
+# Load models
+cache_dir = ".hf_cache/"
 controlnet = ControlNetModel.from_pretrained(
-    "lllyasviel/sd-controlnet-canny", torch_dtype=torch.float16
+    "lllyasviel/sd-controlnet-canny",
+    torch_dtype=torch.float16,
+    cache_dir=cache_dir,
 )
-pipe_sdxl_controlnet = StableDiffusionControlNetPipeline.from_pretrained(
-    "runwayml/stable-diffusion-v1-5", controlnet=controlnet, safety_checker=None, torch_dtype=torch.float16
+pipe_controlnet = StableDiffusionControlNetPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5",
+    controlnet=controlnet,
+    safety_checker=None,
+    torch_dtype=torch.float16,
+    variant="fp16",
+    cache_dir=cache_dir,
 )
-pipe_sdxl_controlnet.scheduler = UniPCMultistepScheduler.from_config(pipe_sdxl_controlnet.scheduler.config)
-#pipe_sdxl_controlnet.enable_xformers_memory_efficient_attention()
-pipe_sdxl_controlnet.enable_model_cpu_offload()
+pipe_controlnet.scheduler = UniPCMultistepScheduler.from_config(
+    pipe_controlnet.scheduler.config
+)
+pipe_controlnet.enable_model_cpu_offload()
+pipe_controlnet.enable_xformers_memory_efficient_attention()
 
 #pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
 #pipe_refiner.to("cuda")
 pipe_refiner = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-2-depth")
 pipe_refiner.to("cuda")
+# pipe_refiner.enable_model_cpu_offload()
+pipe_refiner.enable_xformers_memory_efficient_attention()
 
-pipe = DiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", safety_checker = None, requires_safety_checker = False)
-pipe.load_lora_weights("MdEndan/stable-diffusion-lora-fine-tuned")
-pipe = pipe.to("cuda")
+pipe = DiffusionPipeline.from_pretrained(
+    "CompVis/stable-diffusion-v1-4",
+    safety_checker=None,
+    requires_safety_checker=False,
+    variant="fp16",
+    cache_dir=cache_dir,
+)
+pipe.load_lora_weights(
+    "MdEndan/stable-diffusion-lora-fine-tuned",
+    cache_dir=cache_dir,
+)
+pipe.to("cuda")
+# pipe.enable_model_cpu_offload()
+pipe.enable_xformers_memory_efficient_attention()
+
 
 def clean_sketch(img):
     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
@@ -94,7 +178,7 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
         
     # Generate Image from sketch
     controlnet_conditioning_scale = 0.5  # recommended for good generalization
-    image = pipe_sdxl_controlnet(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image, generator = generator, num_inference_steps=steps_slider_image, guidance_scale=guidance_scale).images[0]
+    image = pipe_controlnet(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image, generator = generator, num_inference_steps=steps_slider_image, guidance_scale=guidance_scale).images[0]
     image.save("generation/img_generated.png")
     #image = image.resize((1024,1024))
     
@@ -127,7 +211,8 @@ with gr.Blocks() as demo:
 
     with gr.Row():
         sketch = gr.ImageEditor(label = 'Sketch generated from text.', image_mode='RGB', interactive=True, brush=gr.components.image_editor.Brush( colors=["rgb(0, 0, 0)"],color_mode="fixed"))
-        video = gr.Video(label='Live recording')
+        # video = gr.Video(label='Live recording')
+        cam_img = gr.Image(get_camera_frame, label="Camera", every=0.0001)
         image = gr.Image(label = 'Final generated image.')
 
 
@@ -197,4 +282,5 @@ with gr.Blocks() as demo:
     b_sketch = gr.Button("Save Sketch")
     b_sketch.click(download_changes, inputs=sketch, outputs=sketch)
 
-demo.launch(server_name='158.109.8.123')
+
+demo.launch(server_name=server_name)
