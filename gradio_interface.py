@@ -1,14 +1,21 @@
-from diffusers import DiffusionPipeline, StableDiffusionXLControlNetPipeline, StableDiffusionXLImg2ImgPipeline, ControlNetModel, AutoencoderKL, StableDiffusionImg2ImgPipeline
-from diffusers.utils import load_image
+import argparse
+import json
+import os
+from pathlib import Path
+
+import cv2
+import gradio as gr
 import numpy as np
 import torch
-import cv2
+from diffusers import (
+    AutoencoderKL,
+    ControlNetModel,
+    DiffusionPipeline,
+    StableDiffusionXLControlNetPipeline,
+    StableDiffusionXLImg2ImgPipeline,
+)
 from PIL import Image
-import gradio as gr
-import os 
-from pathlib import Path
-import glob
-import json
+
 
 if not os.path.exists('generation'):
     os.makedirs(f'generation')
@@ -189,4 +196,12 @@ with gr.Blocks() as demo:
     b_sketch = gr.Button("Save Sketch")
     b_sketch.click(download_changes, inputs=sketch, outputs=sketch)
 
-demo.launch(server_name='158.109.8.123')
+
+ap = argparse.ArgumentParser()
+ap.add_argument(
+    "--server-name",
+    default="127.0.0.1"
+)
+args = ap.parse_args()
+
+demo.launch(server_name=args.server_name)
