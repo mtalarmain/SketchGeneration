@@ -32,18 +32,20 @@ prompt_presets = load_prompt_presets(path_img_style)
 preset_list = list(prompt_presets.keys())
 
 # Load models
-# device = "cuda"
+cache_dir = ".hf_cache/"
 # max_memory = {0: "15GiB", "cpu": "7GiB"}
 controlnet = ControlNetModel.from_pretrained(
     "diffusers/controlnet-canny-sdxl-1.0",
     torch_dtype=torch.float16,
     variant="fp16",
     use_safetensors=True,
+    cache_dir=cache_dir,
 )
 vae = AutoencoderKL.from_pretrained(
     "madebyollin/sdxl-vae-fp16-fix",
     torch_dtype=torch.float16,
     use_safetensors=True,
+    cache_dir=cache_dir,
 )
 pipe_sdxl_controlnet = StableDiffusionXLControlNetPipeline.from_pretrained(
     "stabilityai/stable-diffusion-xl-base-1.0",
@@ -55,6 +57,7 @@ pipe_sdxl_controlnet = StableDiffusionXLControlNetPipeline.from_pretrained(
     # max_memory=max_memory,
     # offload_folder="./offload/",
     offload_state_dict=True,
+    cache_dir=cache_dir,
 )
 pipe_sdxl_controlnet.enable_model_cpu_offload()
 pipe_sdxl_controlnet.enable_xformers_memory_efficient_attention()
@@ -67,6 +70,7 @@ pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained(
     # max_memory=max_memory,
     # offload_folder="./offload/",
     offload_state_dict=True,
+    cache_dir=cache_dir,
 )
 pipe_refiner.enable_model_cpu_offload()
 pipe_refiner.enable_xformers_memory_efficient_attention()
@@ -81,6 +85,7 @@ pipe = DiffusionPipeline.from_pretrained(
     # max_memory=max_memory,
     # offload_folder="./offload/",
     offload_state_dict=True,
+    cache_dir=cache_dir,
 )
 pipe.load_lora_weights("MdEndan/stable-diffusion-lora-fine-tuned")
 pipe.enable_model_cpu_offload()
