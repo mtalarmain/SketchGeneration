@@ -240,7 +240,7 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
         negative_prompt = img_style_prompt['negative']
     
     #From Sketch Image to Canny Image
-    image = cv2.imread(generation_path / 'sketch.png')
+    image = cv2.imread(str(generation_path / 'sketch.png'))
     image = np.array(image)
     image = cv2.Canny(image, 100, 200)
     image = image[:, :, None]
