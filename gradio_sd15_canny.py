@@ -19,6 +19,7 @@ from AVHubert import AVHubert
 from YoloMouthCrop import YoloMouthCrop
 
 
+generation_path = Path("/opt/SketchSpeech/generation")
 avhubert_package_path = "/opt/SketchSpeech/av_hubert/avhubert/"
 avhubert_model_path = "/opt/SketchSpeech/av_hubert/data/finetune-model.pt"
 yolo_model = "/opt/SketchSpeech/av_hubert/data/yolov8n-face.pt"
@@ -44,8 +45,9 @@ yolo = YoloMouthCrop(yolo_model)
 
 # Global variables
 record = False
-video_out_fps = 10
+video_out_fps = 30
 video_out = None
+mouth_video_path = str(generation_path/"mouth.mp4")
 
 # Capture camera
 if camera_device >= 0:
@@ -53,8 +55,7 @@ if camera_device >= 0:
 else:
     camera_capture = None
 
-if not os.path.exists('generation'):
-    os.makedirs(f'generation')
+generation_path.mkdir(exist_ok=True, parents=True)
 
 def load_prompt_presets(path_img_style):
     prompt_presets = {}
@@ -86,18 +87,27 @@ def get_camera_frame():
             print("Create video")
             m_h, m_w, _ = mouth_crop.shape
             video_out = cv2.VideoWriter(
-                "generation/mouth.mp4",
+                mouth_video_path,
                 cv2.VideoWriter_fourcc(*"mp4v"),
                 video_out_fps,
                 (m_w, m_h)
             )
         video_out.write(mouth_crop)
-    else:
-        if video_out is not None:
-            print("Release video")
-            video_out.release()
-            video_out = None
+        
     return frame[:,:,::-1]
+
+def stop_recording():
+    global record, video_out
+    record = False
+    if video_out is not None:
+        print("Release video")
+        video_out.release()
+        video_out = None
+
+def read_lips(video) -> str:
+    transcript = speech.predict(str(video))
+    print("Lip reading:", transcript)
+    return transcript
 
 path_img_style = './prompts/'
 prompt_presets = load_prompt_presets(path_img_style)
@@ -205,9 +215,9 @@ def clean_sketch(img):
 def text_2_sketch(prompt, steps_slider_sketch):
 
     image = pipe(prompt, num_inference_steps= steps_slider_sketch).images[0]
-    image.save("generation/blurry_sketch.png")
+    image.save(generation_path / "blurry_sketch.png")
     image = Image.fromarray(clean_sketch(np.asarray(image)))
-    image.save("generation/sketch.png")
+    image.save(generation_path / "sketch.png")
     return image
 
 def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image, guidance_scale, style_group):
@@ -230,7 +240,7 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
         negative_prompt = img_style_prompt['negative']
     
     #From Sketch Image to Canny Image
-    image = cv2.imread('generation/sketch.png')
+    image = cv2.imread(generation_path / 'sketch.png')
     image = np.array(image)
     image = cv2.Canny(image, 100, 200)
     image = image[:, :, None]
@@ -240,23 +250,39 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
     # Generate Image from sketch
     controlnet_conditioning_scale = 0.5  # recommended for good generalization
     image = pipe_controlnet(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image, generator = generator, num_inference_steps=steps_slider_image, guidance_scale=guidance_scale).images[0]
-    image.save("generation/img_generated.png")
+    image.save(generation_path / "img_generated.png")
     #image = image.resize((1024,1024))
     
     # Refine Image to have better image quality and consistencypipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
     image = pipe_refiner(prompt, image=image, negative_prompt=negative_prompt, strength=strength, generator = generator).images[0]
-    image.save(f"generation/img_refined_{name_file}.png")
+    image.save(generation_path / f"/img_refined_{name_file}.png")
     return image
 
 def download_changes(sketch):
     composite = Image.fromarray(np.asarray(sketch['composite']))
-    composite.save("generation/sketch.png")
+    composite.save(generation_path / "sketch.png")
     return composite
 
 def toggle_recording():
     global record
     record = not record
-    return "Stop recording" if record else "Start Recording"
+    if not record:
+        stop_recording()
+        transcript = read_lips(mouth_video_path)
+        ret_button = "Start Recording"
+    else:
+        transcript = ""
+        ret_button = "Stop recording"
+
+    return ret_button, transcript
+
+# def on_stop_recording(video):
+#     print(video)
+#     yolo.crop_video(video, "generation/mouth.mp4")
+#     transcript = speech.predict("generation/mouth.mp4")
+#     print(transcript)
+#     return gr.update(value=[])
+
 
 
 filename = 'text/stories.txt'
@@ -292,7 +318,12 @@ with gr.Blocks() as demo:
 
     with gr.Row():
         sketch = gr.ImageEditor(label = 'Sketch generated from text.', image_mode='RGB', interactive=True, brush=gr.components.image_editor.Brush( colors=["rgb(0, 0, 0)"],color_mode="fixed"))
-        # video = gr.Video(label='Live recording')
+        # video = gr.Video(label='Live recording', format='mp4', sources=['webcam'])
+        # video.stop_recording(
+        #     on_stop_recording,
+        #     video,
+        #     # gr_video,
+        # )
         cam_img = gr.Image(get_camera_frame, label="Camera", every=0.0001)
         image = gr.Image(label = 'Final generated image.')
 
@@ -377,13 +408,7 @@ with gr.Blocks() as demo:
     button_toggle_record = gr.Button("Start Recording")
     button_toggle_record.click(
         toggle_recording,
-        outputs=button_toggle_record
-    )
-
-    button_toggle_record = gr.Button("Start Recording")
-    button_toggle_record.click(
-        toggle_recording,
-        outputs=button_toggle_record
+        outputs=[button_toggle_record, text]
     )
 
 
