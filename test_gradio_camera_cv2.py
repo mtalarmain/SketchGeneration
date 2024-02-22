@@ -78,6 +78,7 @@ def toggle_yolo(value):
 with gr.Blocks() as demo:
     with gr.Row():
         image_yolo = gr.Image(get_frame, label="Camera", interactive=False, every=0.00001)
+        # image_yolo = gr.Image(get_frame, label="Camera", interactive=False, every=0.005, streaming=True)
         image_lips = gr.Image(get_lips_crop, label="lips crop", interactive=False, every=0.00001)
     button_toggle_record = gr.Button("Start Recording")
     yolo_checkbox = gr.Checkbox(False, label="Toggle Yolo")
@@ -90,5 +91,6 @@ with gr.Blocks() as demo:
         toggle_yolo,
         yolo_checkbox
     )
+    image_editor = gr.ImageEditor()
 
 demo.launch(server_name="127.0.0.1")

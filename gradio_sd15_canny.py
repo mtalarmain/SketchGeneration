@@ -1,28 +1,45 @@
 import argparse
+import ast
 import json
-import os
 from pathlib import Path
 
 import cv2
 import gradio as gr
+# from gradio_patchedimageeditor import patchedImageEditor
 import numpy as np
 import torch
+from AVHubert import AVHubert
 from diffusers import (ControlNetModel, DiffusionPipeline,
                        StableDiffusionControlNetPipeline,
-                       StableDiffusionXLImg2ImgPipeline,
                        UniPCMultistepScheduler)
 from PIL import Image
-import ast
-from rapidfuzz import process, fuzz, utils
-
-from AVHubert import AVHubert
+from rapidfuzz import fuzz, process, utils
 from YoloMouthCrop import YoloMouthCrop
 
 
-generation_path = Path("/opt/SketchSpeech/generation")
+# Constants
+generation_path = Path("/home/labo/Projects/CVC/MWC2024/SketchGeneration/generation") # Path("/opt/SketchSpeech/generation")
 avhubert_package_path = "/opt/SketchSpeech/av_hubert/avhubert/"
 avhubert_model_path = "/opt/SketchSpeech/av_hubert/data/finetune-model.pt"
 yolo_model = "/opt/SketchSpeech/av_hubert/data/yolov8n-face.pt"
+path_img_style = './prompts/'
+cache_dir = ".hf_cache/"
+stories_filename = 'text/stories.txt'
+
+# Global variables
+record = False
+video_out_fps = 15
+video_out = None
+mouth_video_path = str(generation_path/"mouth.mp4")
+
+
+def load_prompt_presets(path_img_style):
+    prompt_presets = {}
+    for preset_path in Path(path_img_style).glob('*'):
+        preset = json.loads(preset_path.read_text())
+        prompt_presets[preset_path.stem] = preset
+    return prompt_presets
+
 
 # Parse args
 ap = argparse.ArgumentParser()
@@ -39,15 +56,11 @@ args = ap.parse_args()
 server_name = args.server_name
 camera_device = args.camera_device
 
+generation_path.mkdir(exist_ok=True, parents=True)
+
 # Load speech and yolo models
 speech = AVHubert(avhubert_package_path, avhubert_model_path)
 yolo = YoloMouthCrop(yolo_model)
-
-# Global variables
-record = False
-video_out_fps = 30
-video_out = None
-mouth_video_path = str(generation_path/"mouth.mp4")
 
 # Capture camera
 if camera_device >= 0:
@@ -55,14 +68,59 @@ if camera_device >= 0:
 else:
     camera_capture = None
 
-generation_path.mkdir(exist_ok=True, parents=True)
+# Load presets
+prompt_presets = load_prompt_presets(path_img_style)
+preset_list = list(prompt_presets.keys())
 
-def load_prompt_presets(path_img_style):
-    prompt_presets = {}
-    for preset_path in Path(path_img_style).glob('*'):
-        preset = json.loads(preset_path.read_text())
-        prompt_presets[preset_path.stem] = preset
-    return prompt_presets
+# Load stories
+with open(stories_filename) as file:
+    lines = [line.rstrip() for line in file]
+
+# Load Stable diffusion models
+controlnet = ControlNetModel.from_pretrained(
+    "lllyasviel/sd-controlnet-canny",
+    torch_dtype=torch.float16,
+    cache_dir=cache_dir,
+)
+pipe_controlnet = StableDiffusionControlNetPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5",
+    controlnet=controlnet,
+    safety_checker=None,
+    torch_dtype=torch.float16,
+    variant="fp16",
+    cache_dir=cache_dir,
+)
+pipe_controlnet.scheduler = UniPCMultistepScheduler.from_config(
+    pipe_controlnet.scheduler.config
+)
+pipe_controlnet.enable_model_cpu_offload()
+pipe_controlnet.enable_xformers_memory_efficient_attention()
+
+#pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
+#pipe_refiner.to("cuda")
+pipe_refiner = DiffusionPipeline.from_pretrained(
+    "stabilityai/stable-diffusion-2-depth",
+    cache_dir=cache_dir,
+)
+pipe_refiner.to("cuda")
+# pipe_refiner.enable_model_cpu_offload()
+pipe_refiner.enable_xformers_memory_efficient_attention()
+
+pipe = DiffusionPipeline.from_pretrained(
+    "CompVis/stable-diffusion-v1-4",
+    safety_checker=None,
+    requires_safety_checker=False,
+    variant="fp16",
+    cache_dir=cache_dir,
+)
+pipe.load_lora_weights(
+    "MdEndan/stable-diffusion-lora-fine-tuned",
+    cache_dir=cache_dir,
+)
+pipe.to("cuda")
+# pipe.enable_model_cpu_offload()
+pipe.enable_xformers_memory_efficient_attention()
+
 
 def get_camera_frame():
     global record, video_out
@@ -96,6 +154,7 @@ def get_camera_frame():
         
     return frame[:,:,::-1]
 
+
 def stop_recording():
     global record, video_out
     record = False
@@ -104,57 +163,11 @@ def stop_recording():
         video_out.release()
         video_out = None
 
+
 def read_lips(video) -> str:
     transcript = speech.predict(str(video))
     print("Lip reading:", transcript)
     return transcript
-
-path_img_style = './prompts/'
-prompt_presets = load_prompt_presets(path_img_style)
-preset_list = list(prompt_presets.keys())
-
-# Load models
-cache_dir = ".hf_cache/"
-controlnet = ControlNetModel.from_pretrained(
-    "lllyasviel/sd-controlnet-canny",
-    torch_dtype=torch.float16,
-    cache_dir=cache_dir,
-)
-pipe_controlnet = StableDiffusionControlNetPipeline.from_pretrained(
-    "runwayml/stable-diffusion-v1-5",
-    controlnet=controlnet,
-    safety_checker=None,
-    torch_dtype=torch.float16,
-    variant="fp16",
-    cache_dir=cache_dir,
-)
-pipe_controlnet.scheduler = UniPCMultistepScheduler.from_config(
-    pipe_controlnet.scheduler.config
-)
-pipe_controlnet.enable_model_cpu_offload()
-pipe_controlnet.enable_xformers_memory_efficient_attention()
-
-#pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
-#pipe_refiner.to("cuda")
-pipe_refiner = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-2-depth")
-pipe_refiner.to("cuda")
-# pipe_refiner.enable_model_cpu_offload()
-pipe_refiner.enable_xformers_memory_efficient_attention()
-
-pipe = DiffusionPipeline.from_pretrained(
-    "CompVis/stable-diffusion-v1-4",
-    safety_checker=None,
-    requires_safety_checker=False,
-    variant="fp16",
-    cache_dir=cache_dir,
-)
-pipe.load_lora_weights(
-    "MdEndan/stable-diffusion-lora-fine-tuned",
-    cache_dir=cache_dir,
-)
-pipe.to("cuda")
-# pipe.enable_model_cpu_offload()
-pipe.enable_xformers_memory_efficient_attention()
 
 
 def match_sentence(n ,text, transcription):
@@ -163,6 +176,7 @@ def match_sentence(n ,text, transcription):
     print(phrases)
     out = process.extractOne(transcription, phrases, scorer=fuzz.ratio, processor=utils.default_process)
     return out[0]
+
 
 def next_sentences(n, text):
     list_text = ast.literal_eval(text)
@@ -187,6 +201,7 @@ def next_sentences(n, text):
             """)
     return n, stories
 
+
 def before_sentences(n, text):
     list_text = ast.literal_eval(text)
     n = n - 7
@@ -202,6 +217,7 @@ def before_sentences(n, text):
         """)
     return n, stories
 
+
 def clean_sketch(img):
     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     img = (255-img) # inverse black and white
@@ -212,16 +228,16 @@ def clean_sketch(img):
     img_eroded = cv2.cvtColor(erosion, cv2.COLOR_GRAY2RGB)
     return img_eroded
 
-def text_2_sketch(prompt, steps_slider_sketch):
 
+def text_2_sketch(prompt, steps_slider_sketch):
     image = pipe(prompt, num_inference_steps= steps_slider_sketch).images[0]
     image.save(generation_path / "blurry_sketch.png")
     image = Image.fromarray(clean_sketch(np.asarray(image)))
     image.save(generation_path / "sketch.png")
     return image
 
-def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image, guidance_scale, style_group, gallery, num_img):
 
+def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image, guidance_scale, style_group, gallery, num_img):
     # Fix seed
     seed = 42
     generator = torch.Generator(device='cuda')
@@ -268,10 +284,12 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
     list_output = [gr.Gallery(columns=[num_img], value=gallery), gr.Number(value=num_img)]
     return list_output
 
+
 def download_changes(sketch):
     composite = Image.fromarray(np.asarray(sketch['composite']))
     composite.save(generation_path / "sketch.png")
     return composite
+
 
 def toggle_recording():
     global record
@@ -286,24 +304,13 @@ def toggle_recording():
 
     return ret_button, transcript
 
-# def on_stop_recording(video):
-#     print(video)
-#     yolo.crop_video(video, "generation/mouth.mp4")
-#     transcript = speech.predict("generation/mouth.mp4")
-#     print(transcript)
-#     return gr.update(value=[])
-
 
 def remove_img():
     list_output = [gr.Gallery(value=None), gr.Number(value=0)]
     return list_output
 
 
-filename = 'text/stories.txt'
-with open(filename) as file:
-    lines = [line.rstrip() for line in file]
-
-
+# Gradio UI
 with gr.Blocks() as demo:
 
     gr.Markdown("""
@@ -331,20 +338,19 @@ with gr.Blocks() as demo:
         """)
 
     with gr.Row():
-        sketch = gr.ImageEditor(label = 'Sketch generated from text.', image_mode='RGB', interactive=True, brush=gr.components.image_editor.Brush( colors=["rgb(0, 0, 0)"],color_mode="fixed"))
-        # video = gr.Video(label='Live recording', format='mp4', sources=['webcam'])
-        # video.stop_recording(
-        #     on_stop_recording,
-        #     video,
-        #     # gr_video,
-        # )
+        sketch = gr.ImageEditor(
+        # sketch = patchedImageEditor(
+            label='Sketch generated from text.',
+            image_mode='RGB',
+            interactive=True,
+            brush=gr.components.image_editor.Brush(colors=["rgb(0, 0, 0)", "rgb(255, 255, 255)"], color_mode="fixed")
+        )
         cam_img = gr.Image(get_camera_frame, label="Camera", every=0.0001)
-        #image = gr.Image(label = 'Final generated image.')
         gallery = gr.Gallery(
-        label="Generated images", columns=[1], rows=[1], interactive=True)
+            label="Generated images", columns=[1], rows=[1], interactive=True
+        )
 
     num_img = gr.Number(value=0, visible=False)
-
 
     with gr.Accordion("Advanced", open=False):
         style_group = gr.Radio(
@@ -426,7 +432,6 @@ with gr.Blocks() as demo:
                 btn_remove = gr.Button("Remove All Images")
                 btn_remove.click(remove_img, None, [gallery, num_img])
         
-
     button_toggle_record = gr.Button("Start Recording")
     button_toggle_record.click(
         toggle_recording,

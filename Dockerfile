@@ -29,13 +29,14 @@ WORKDIR /opt/SketchSpeech
 
 # Enable color prompt
 # RUN sed -i '/#force_color_prompt=yes/c\force_color_prompt=yes' /home/user/.bashrc
+RUN sed -i '/#force_color_prompt=yes/c\force_color_prompt=yes' /root/.bashrc
 
 # Install python dependencies
 RUN python -m pip install --upgrade pip
 RUN python -m pip install --upgrade setuptools
-RUN python -m pip install numpy opencv-python==4.8.0.76 opencv-contrib-python==4.8.0.76 ultralytics rapidfuzz
+RUN python -m pip install numpy opencv-python==4.8.0.76 opencv-contrib-python==4.8.0.76 ultralytics rapidfuzz python_speech_features sentencepiece
 RUN python -m pip install torch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 --index-url https://download.pytorch.org/whl/cu118
-RUN python -m pip install transformers accelerate diffusers gradio==4.16.0
+RUN python -m pip install transformers accelerate diffusers gradio==4.19.1
 RUN python -m pip install -U xformers==0.0.24 --index-url https://download.pytorch.org/whl/cu118
 
 # Install av_hubert
