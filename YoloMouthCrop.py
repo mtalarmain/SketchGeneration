@@ -1,6 +1,7 @@
 from typing import List
 import argparse
 import os
+from pathlib import Path
 import subprocess
 import shutil
 import tempfile
@@ -10,23 +11,32 @@ from tqdm import tqdm
 from ultralytics import YOLO
 
 
-def write_video_ffmpeg(rois, target_path, ffmpeg):
-    decimals = 10
-    fps = 25
-    tmp_dir = tempfile.mkdtemp()
-    for i_roi, roi in enumerate(rois):
-        cv2.imwrite(os.path.join(tmp_dir, str(i_roi).zfill(decimals)+'.png'), roi)
-    list_fn = os.path.join(tmp_dir, "list")
-    with open(list_fn, 'w') as fo:
-        fo.write("file " + "'" + tmp_dir+'/%0'+str(decimals)+'d.png' + "'\n")
-    # ffmpeg
-    if os.path.isfile(target_path):
-        os.remove(target_path)
-    cmd = [ffmpeg, "-f", "concat", "-safe", "0", "-i", list_fn, "-q:v", "1", "-r", str(fps), '-y', '-crf', '20', target_path]
-    pipe = subprocess.run(cmd, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
-    # rm tmp dir
+# def write_video_ffmpeg(rois, target_path, ffmpeg, fps = 25):
+#     decimals = 10
+#     tmp_dir = tempfile.mkdtemp()
+#     for i_roi, roi in enumerate(rois):
+#         cv2.imwrite(os.path.join(tmp_dir, str(i_roi).zfill(decimals)+'.png'), roi)
+#     list_fn = os.path.join(tmp_dir, "list")
+#     with open(list_fn, 'w') as fo:
+#         fo.write("file " + "'" + tmp_dir+'/%0'+str(decimals)+'d.png' + "'\n")
+#     # ffmpeg
+#     if os.path.isfile(target_path):
+#         os.remove(target_path)
+#     cmd = [ffmpeg, "-f", "concat", "-safe", "0", "-i", list_fn, "-q:v", "1", "-r", str(fps), '-y', '-crf', '20', target_path]
+#     pipe = subprocess.run(cmd, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+#     # rm tmp dir
+#     shutil.rmtree(tmp_dir)
+#     return
+
+def write_video_ffmpeg(frames, target_path, ffmpeg, fps = 25):
+    tmp_dir = Path(tempfile.mkdtemp())
+    for i, frame in enumerate(frames):
+        path = tmp_dir / f"{str(i).zfill(30)}.png"
+        cv2.imwrite(str(path), frame)
+    cmd = [ffmpeg, "-framerate", str(fps), "-pattern_type", "glob", "-i", f"{tmp_dir / '*.png'}",
+           "-c:v", "libx264", "-y", target_path]
+    pipe = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     shutil.rmtree(tmp_dir)
-    return
 
 
 class YoloMouthCrop:
@@ -76,6 +86,8 @@ class YoloMouthCrop:
 
     def crop_video(self, input_video_path, output_video_path, size: int = 96):
         cap = cv2.VideoCapture(input_video_path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        print("fps", fps)
         num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         crop_frames = []
         pbar = tqdm(total=num_frames)
@@ -89,7 +101,7 @@ class YoloMouthCrop:
                 crop_frames.append(crop)
             pbar.update()
         cap.release()
-        write_video_ffmpeg(crop_frames, output_video_path, "/usr/bin/ffmpeg")  
+        write_video_ffmpeg(crop_frames, output_video_path, "/usr/bin/ffmpeg", fps)  
 
 
 if __name__ == "__main__":
