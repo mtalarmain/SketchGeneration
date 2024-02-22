@@ -94,7 +94,8 @@ pipe_controlnet = StableDiffusionControlNetPipeline.from_pretrained(
 pipe_controlnet.scheduler = UniPCMultistepScheduler.from_config(
     pipe_controlnet.scheduler.config
 )
-pipe_controlnet.enable_model_cpu_offload()
+# pipe_controlnet.enable_model_cpu_offload()
+pipe_controlnet.to("cuda")
 pipe_controlnet.enable_xformers_memory_efficient_attention()
 
 #pipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
