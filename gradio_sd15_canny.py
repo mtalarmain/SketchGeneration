@@ -124,37 +124,37 @@ pipe.to("cuda")
 pipe.enable_xformers_memory_efficient_attention()
 
 
-def get_camera_frame():
-    global record, video_out
-    if camera_capture is None:
-        return None
+# def get_camera_frame():
+#     global record, video_out
+#     if camera_capture is None:
+#         return None
     
-    ok, frame = camera_capture.read()
-    if not ok:
-        return None
-    h,w,c = frame.shape
+#     ok, frame = camera_capture.read()
+#     if not ok:
+#         return None
+#     h,w,c = frame.shape
 
-    yolo_results = yolo.predict(frame)
-    if yolo_results:
-        yolo_result = yolo_results[0]
-        mouth_crop = yolo.crop_image(yolo_result, frame)
-        frame = yolo.plot_results(yolo_result, frame)
-    else:
-        mouth_crop = None
+#     yolo_results = yolo.predict(frame)
+#     if yolo_results:
+#         yolo_result = yolo_results[0]
+#         mouth_crop = yolo.crop_image(yolo_result, frame)
+#         frame = yolo.plot_results(yolo_result, frame)
+#     else:
+#         mouth_crop = None
     
-    if record and mouth_crop is not None:
-        if video_out is None:
-            print("Create video")
-            m_h, m_w, _ = mouth_crop.shape
-            video_out = cv2.VideoWriter(
-                mouth_video_path,
-                cv2.VideoWriter_fourcc(*"mp4v"),
-                video_out_fps,
-                (m_w, m_h)
-            )
-        video_out.write(mouth_crop)
+#     if record and mouth_crop is not None:
+#         if video_out is None:
+#             print("Create video")
+#             m_h, m_w, _ = mouth_crop.shape
+#             video_out = cv2.VideoWriter(
+#                 mouth_video_path,
+#                 cv2.VideoWriter_fourcc(*"mp4v"),
+#                 video_out_fps,
+#                 (m_w, m_h)
+#             )
+#         video_out.write(mouth_crop)
         
-    return frame[:,:,::-1]
+#     return frame[:,:,::-1]
 
 
 def stop_recording():

@@ -34,7 +34,7 @@ def write_video_ffmpeg(frames, target_path, ffmpeg, fps = 25):
         path = tmp_dir / f"{str(i).zfill(30)}.png"
         cv2.imwrite(str(path), frame)
     cmd = [ffmpeg, "-framerate", str(fps), "-pattern_type", "glob", "-i", f"{tmp_dir / '*.png'}",
-           "-c:v", "libx264", "-y", target_path]
+           "-c:v", "libx264", "-preset", "slower", "-y", "-r", "25", target_path]
     pipe = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     shutil.rmtree(tmp_dir)
 
@@ -86,6 +86,8 @@ class YoloMouthCrop:
 
     def crop_video(self, input_video_path, output_video_path, size: int = 96):
         cap = cv2.VideoCapture(input_video_path)
+        # fps = fps if fps is not None else cap.get(cv2.CAP_PROP_FPS)
+        # fps = min(cap.get(cv2.CAP_PROP_FPS), 30)
         fps = cap.get(cv2.CAP_PROP_FPS)
         print("fps", fps)
         num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
