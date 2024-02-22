@@ -13,6 +13,7 @@ from diffusers import (ControlNetModel, DiffusionPipeline,
                        UniPCMultistepScheduler)
 from PIL import Image
 import ast
+from rapidfuzz import process, fuzz, utils
 
 
 # Parse args
@@ -131,6 +132,14 @@ pipe.to("cuda")
 # pipe.enable_model_cpu_offload()
 pipe.enable_xformers_memory_efficient_attention()
 
+
+def match_sentence(n ,text, transcription):
+    all_phrases = ast.literal_eval(text)
+    phrases = [all_phrases[n], all_phrases[n+1], all_phrases[n+2], all_phrases[n+3], all_phrases[n+4]]
+    print(phrases)
+    out = process.extractOne(transcription, phrases, scorer=fuzz.ratio, processor=utils.default_process)
+    return out[0]
+
 def next_sentences(n, text):
     list_text = ast.literal_eval(text)
     n = n + 7
@@ -245,7 +254,10 @@ with gr.Blocks() as demo:
     n = gr.Number(value=2, visible = False)
 
     with gr.Row():
-        text = gr.Textbox(label = 'Write the text you want to generate an image from.')
+        with gr.Group():
+            text = gr.Textbox(label = 'Write the text you want to generate an image from.')
+            b_match = gr.Button('Match sentence')
+            b_match.click(match_sentence, inputs=[n, list_text, text], outputs=text)
         stories = gr.Markdown(f""" 
             <center>Choose one sentence to say, right in front of the camera</center>
             Sentence 1: {lines[2]}\n
