@@ -29,10 +29,10 @@ def predict_yolo(frame):
 def get_frame():
     global lips_frame, frame, record, video_out, use_yolo
     ok, frame = capture.read()
-    h,w,c = frame.shape
-
     if not ok:
         return None
+    
+    h,w,c = frame.shape
 
     if use_yolo:
         frame, lips_frame = predict_yolo(frame)

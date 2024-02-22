@@ -13,6 +13,13 @@ from diffusers import (ControlNetModel, DiffusionPipeline,
                        UniPCMultistepScheduler)
 from PIL import Image
 
+from AVHubert import AVHubert
+from YoloMouthCrop import YoloMouthCrop
+
+
+avhubert_package_path = "/opt/SketchSpeech/av_hubert/avhubert/"
+avhubert_model_path = "/opt/SketchSpeech/av_hubert/data/finetune-model.pt"
+yolo_model = "/opt/SketchSpeech/av_hubert/data/yolov8n-face.pt"
 
 # Parse args
 ap = argparse.ArgumentParser()
@@ -22,12 +29,21 @@ ap.add_argument(
 )
 ap.add_argument(
     "--camera-device",
-    default=-1,
+    default=0,
     type=int,
 )
 args = ap.parse_args()
 server_name = args.server_name
 camera_device = args.camera_device
+
+# Load speech and yolo models
+speech = AVHubert(avhubert_package_path, avhubert_model_path)
+yolo = YoloMouthCrop(yolo_model)
+
+# Global variables
+record = False
+video_out_fps = 10
+video_out = None
 
 # Capture camera
 if camera_device >= 0:
@@ -46,41 +62,39 @@ def load_prompt_presets(path_img_style):
     return prompt_presets
 
 def get_camera_frame():
-    print(camera_capture)
-    # global lips_frame, frame, record, video_out, use_yolo
+    global record, video_out
     if camera_capture is None:
         return None
     
     ok, frame = camera_capture.read()
-    h,w,c = frame.shape
-    print(ok, frame)
-
     if not ok:
         return None
+    h,w,c = frame.shape
 
-    # if use_yolo:
-    #     frame, lips_frame = predict_yolo(frame)
+    yolo_results = yolo.predict(frame)
+    if yolo_results:
+        yolo_result = yolo_results[0]
+        mouth_crop = yolo.crop_image(yolo_result, frame)
+        frame = yolo.plot_results(yolo_result, frame)
+    else:
+        mouth_crop = None
     
-    # frame = cv2.rectangle(
-    #     frame,
-    #     (int(w*0.3),int(h*0.3)),
-    #     (int(w*0.7),int(h*0.7)),
-    #     (0,255,255),
-    #     1
-    # ) 
-
-    # if record:
-    #     if video_out is None:
-    #         print("Create video")
-    #         video_out = cv2.VideoWriter("output.mp4", cv2.VideoWriter_fourcc(*"mp4v"), video_out_fps, (w, h))
-    #     video_out.write(frame)
-    # else:
-    #     if video_out is not None:
-    #         print("Release video")
-    #         video_out.release()
-    #         video_out = None
-
-    print(frame.sum())
+    if record and mouth_crop is not None:
+        if video_out is None:
+            print("Create video")
+            m_h, m_w, _ = mouth_crop.shape
+            video_out = cv2.VideoWriter(
+                "generation/mouth.mp4",
+                cv2.VideoWriter_fourcc(*"mp4v"),
+                video_out_fps,
+                (m_w, m_h)
+            )
+        video_out.write(mouth_crop)
+    else:
+        if video_out is not None:
+            print("Release video")
+            video_out.release()
+            video_out = None
     return frame[:,:,::-1]
 
 path_img_style = './prompts/'
@@ -192,6 +206,10 @@ def download_changes(sketch):
     composite.save("generation/sketch.png")
     return composite
 
+def toggle_recording():
+    global record
+    record = not record
+    return "Stop recording" if record else "Start Recording"
 
 
 with gr.Blocks() as demo:
@@ -281,6 +299,12 @@ with gr.Blocks() as demo:
 
     b_sketch = gr.Button("Save Sketch")
     b_sketch.click(download_changes, inputs=sketch, outputs=sketch)
+
+    button_toggle_record = gr.Button("Start Recording")
+    button_toggle_record.click(
+        toggle_recording,
+        outputs=button_toggle_record
+    )
 
 
 demo.launch(server_name=server_name)
