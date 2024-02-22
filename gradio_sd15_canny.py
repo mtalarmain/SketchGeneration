@@ -2,6 +2,7 @@ import argparse
 import ast
 import json
 from pathlib import Path
+import shutil
 
 import cv2
 import gradio as gr
@@ -25,12 +26,12 @@ yolo_model = "/opt/SketchSpeech/av_hubert/data/yolov8n-face.pt"
 path_img_style = './prompts/'
 cache_dir = ".hf_cache/"
 stories_filename = 'text/stories.txt'
+mouth_video_path = str(generation_path/"mouth.mp4")
 
 # Global variables
 record = False
 video_out_fps = 15
 video_out = None
-mouth_video_path = str(generation_path/"mouth.mp4")
 
 
 def load_prompt_presets(path_img_style):
@@ -63,10 +64,10 @@ speech = AVHubert(avhubert_package_path, avhubert_model_path)
 yolo = YoloMouthCrop(yolo_model)
 
 # Capture camera
-if camera_device >= 0:
-    camera_capture = cv2.VideoCapture(camera_device)
-else:
-    camera_capture = None
+# if camera_device >= 0:
+#     camera_capture = cv2.VideoCapture(camera_device)
+# else:
+#     camera_capture = None
 
 # Load presets
 prompt_presets = load_prompt_presets(path_img_style)
@@ -291,23 +292,32 @@ def download_changes(sketch):
     return composite
 
 
-def toggle_recording():
-    global record
-    record = not record
-    if not record:
-        stop_recording()
-        transcript = read_lips(mouth_video_path)
-        ret_button = "Start Recording"
-    else:
-        transcript = ""
-        ret_button = "Stop recording"
+# def toggle_recording():
+#     global record
+#     record = not record
+#     if not record:
+#         stop_recording()
+#         transcript = read_lips(mouth_video_path)
+#         ret_button = "Start Recording"
+#     else:
+#         transcript = ""
+#         ret_button = "Stop recording"
 
-    return ret_button, transcript
+#     return ret_button, transcript
 
 
 def remove_img():
     list_output = [gr.Gallery(value=None), gr.Number(value=0)]
     return list_output
+
+
+def on_stop_recording(video):
+    print("Cropping", video)
+    shutil.copyfile(video, generation_path / "source.mp4")
+    yolo.crop_video(video, mouth_video_path)
+    transcript = read_lips(mouth_video_path)
+    print(transcript)
+    return (gr.update(value=None), transcript)
 
 
 # Gradio UI
@@ -345,7 +355,13 @@ with gr.Blocks() as demo:
             interactive=True,
             brush=gr.components.image_editor.Brush(colors=["rgb(0, 0, 0)", "rgb(255, 255, 255)"], color_mode="fixed")
         )
-        cam_img = gr.Image(get_camera_frame, label="Camera", every=0.0001)
+        # cam_img = gr.Image(get_camera_frame, label="Camera", every=0.0001)
+        video = gr.Video(label='Live recording', format='mp4', sources=['webcam'])
+        video.stop_recording(
+            on_stop_recording,
+            video,
+            [video, text],
+        )
         gallery = gr.Gallery(
             label="Generated images", columns=[1], rows=[1], interactive=True
         )
@@ -432,11 +448,11 @@ with gr.Blocks() as demo:
                 btn_remove = gr.Button("Remove All Images")
                 btn_remove.click(remove_img, None, [gallery, num_img])
         
-    button_toggle_record = gr.Button("Start Recording")
-    button_toggle_record.click(
-        toggle_recording,
-        outputs=[button_toggle_record, text]
-    )
+    # button_toggle_record = gr.Button("Start Recording")
+    # button_toggle_record.click(
+    #     toggle_recording,
+    #     outputs=[button_toggle_record, text]
+    # )
 
 
 demo.launch(server_name=server_name)
