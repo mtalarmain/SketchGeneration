@@ -220,7 +220,7 @@ def text_2_sketch(prompt, steps_slider_sketch):
     image.save(generation_path / "sketch.png")
     return image
 
-def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image, guidance_scale, style_group):
+def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image, guidance_scale, style_group, gallery, num_img):
 
     # Fix seed
     seed = 42
@@ -255,8 +255,18 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
     
     # Refine Image to have better image quality and consistencypipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
     image = pipe_refiner(prompt, image=image, negative_prompt=negative_prompt, strength=strength, generator = generator).images[0]
-    image.save(generation_path / f"/img_refined_{name_file}.png")
-    return image
+    image.save(f"generation/img_refined_{name_file}.png")
+    if num_img==0:
+        num_img += 1
+        gallery = [(np.asarray(image), None)]
+    elif num_img<=4:
+        num_img += 1
+        gallery = gallery + [(np.asarray(image), None)]
+    else:
+        num_img = 5
+        gallery = gallery[-4:] + [(np.asarray(image), None)]
+    list_output = [gr.Gallery(columns=[num_img], value=gallery), gr.Number(value=num_img)]
+    return list_output
 
 def download_changes(sketch):
     composite = Image.fromarray(np.asarray(sketch['composite']))
@@ -283,6 +293,10 @@ def toggle_recording():
 #     print(transcript)
 #     return gr.update(value=[])
 
+
+def remove_img():
+    list_output = [gr.Gallery(value=None), gr.Number(value=0)]
+    return list_output
 
 
 filename = 'text/stories.txt'
@@ -325,7 +339,11 @@ with gr.Blocks() as demo:
         #     # gr_video,
         # )
         cam_img = gr.Image(get_camera_frame, label="Camera", every=0.0001)
-        image = gr.Image(label = 'Final generated image.')
+        #image = gr.Image(label = 'Final generated image.')
+        gallery = gr.Gallery(
+        label="Generated images", columns=[1], rows=[1], interactive=True)
+
+    num_img = gr.Number(value=0, visible=False)
 
 
     with gr.Accordion("Advanced", open=False):
@@ -396,13 +414,17 @@ with gr.Blocks() as demo:
         
         with gr.Group():
             with gr.Row():
-                b_next = gr.Button('Next')
-                b_next.click(next_sentences, inputs=[n, list_text], outputs=[n, stories])
                 b_before = gr.Button('Before')
                 b_before.click(before_sentences, inputs=[n, list_text], outputs=[n, stories])
+                b_next = gr.Button('Next')
+                b_next.click(next_sentences, inputs=[n, list_text], outputs=[n, stories])
         
-        b2 = gr.Button("Generate Image")
-        b2.click(sketch_2_image, inputs=[text, additional_positive, additional_negative, strength, steps_slider_image, guidance_scale, style_group], outputs=image)
+        with gr.Group():
+            with gr.Row():
+                b2 = gr.Button("Generate Image")
+                b2.click(sketch_2_image, inputs=[text, additional_positive, additional_negative, strength, steps_slider_image, guidance_scale, style_group, gallery, num_img], outputs=[gallery, num_img])
+                btn_remove = gr.Button("Remove All Images")
+                btn_remove.click(remove_img, None, [gallery, num_img])
         
 
     button_toggle_record = gr.Button("Start Recording")
