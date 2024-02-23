@@ -309,10 +309,30 @@ def save_book_images(gallery):
     try:
         now_str = datetime.now().strftime("%d-%m-%Y-%H-%M-%S")
         out_path = generation_path / now_str
+        
+        # Increment if duplicated
+        if out_path.exists():
+            for i in range(100):
+                new_out_path = out_path.parent / (out_path.name + f"_{i}")
+                if not new_out_path.exists():
+                    break
+            out_path = new_out_path
+
         out_path.mkdir(exist_ok=True, parents=True)
+
         for img_path, text in gallery:
             # Sanitize path
+            text = text if text else "none"
             out_img_path = out_path / (re.sub('[^a-zA-Z0-9 \n\.]', '', text) + ".png")
+
+            # Increment if duplicated
+            if out_img_path.exists():
+                for i in range(100):
+                    new_out_img_path = out_img_path.parent / (out_img_path.stem + f"_{i}" + out_img_path.suffix)
+                    if not new_out_img_path.exists():
+                        break
+                out_img_path = new_out_img_path
+
             shutil.copyfile(img_path, out_img_path)
         gr.Info(f"Book saved successfully ({now_str})")
     except Exception as e:
