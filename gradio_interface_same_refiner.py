@@ -155,13 +155,13 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
     image.save(f"generation/img_refined_{name_file}.png")
     if num_img==0:
         num_img += 1
-        gallery = [(np.asarray(image), None)]
+        gallery = [(np.asarray(image), str(init_prompt))]
     elif num_img<=4:
         num_img += 1
-        gallery = gallery + [(np.asarray(image), None)]
+        gallery = gallery + [(np.asarray(image), str(init_prompt))]
     else:
         num_img = 5
-        gallery = gallery[-4:] + [(np.asarray(image), None)]
+        gallery = gallery[-4:] + [(np.asarray(image), str(init_prompt))]
     list_output = [gr.Gallery(columns=[num_img], value=gallery), gr.Number(value=num_img)]
     return list_output
 
