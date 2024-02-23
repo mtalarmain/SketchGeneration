@@ -6,7 +6,6 @@ import shutil
 
 import cv2
 import gradio as gr
-# from gradio_patchedimageeditor import patchedImageEditor
 import numpy as np
 import torch
 from AVHubert import AVHubert
@@ -21,7 +20,7 @@ from YoloMouthCrop import YoloMouthCrop
 # Constants
 generation_path = Path("/home/labo/Projects/CVC/MWC2024/SketchGeneration/generation") # Path("/opt/SketchSpeech/generation")
 avhubert_package_path = "/opt/SketchSpeech/av_hubert/avhubert/"
-avhubert_model_path = "/opt/SketchSpeech/av_hubert/data/finetune-model.pt"
+avhubert_model_path = "/home/labo/Projects/CVC/MWC2024/large_vox_433h.pt" # "/opt/SketchSpeech/av_hubert/data/finetune-model.pt"
 yolo_model = "/opt/SketchSpeech/av_hubert/data/yolov8n-face.pt"
 path_img_style = './prompts/'
 cache_dir = ".hf_cache/"
@@ -367,7 +366,6 @@ with gr.Blocks() as demo:
 
     with gr.Row():
         sketch = gr.ImageEditor(
-        # sketch = patchedImageEditor(
             label='Sketch generated from text.',
             image_mode='RGB',
             interactive=True,

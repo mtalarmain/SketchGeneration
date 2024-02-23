@@ -31,17 +31,19 @@ def load_prompt_presets(path_img_style):
 def presets(prompt_presets):
     return list(prompt_presets.keys())
 
+cache_dir = ".hf_cache/"
 path_img_style = './prompts/'
 prompt_presets = load_prompt_presets(path_img_style)
 preset_list = presets(prompt_presets)
 
-controlnet = ControlNetModel.from_pretrained("diffusers/controlnet-canny-sdxl-1.0", torch_dtype=torch.float16)
-vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
-pipe_sdxl_controlnet = StableDiffusionXLControlNetPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", controlnet=controlnet, vae=vae, torch_dtype=torch.float16)
-pipe_sdxl_controlnet.enable_model_cpu_offload()
+controlnet = ControlNetModel.from_pretrained("diffusers/controlnet-canny-sdxl-1.0", torch_dtype=torch.float16, cache_dir=cache_dir)
+vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16, cache_dir=cache_dir)
+pipe_sdxl_controlnet = StableDiffusionXLControlNetPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", controlnet=controlnet, vae=vae, torch_dtype=torch.float16, cache_dir=cache_dir)
+# pipe_sdxl_controlnet.enable_model_cpu_offload()
+pipe_sdxl_controlnet.to("cuda")
 
-pipe = DiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", safety_checker = None, requires_safety_checker = False)
-pipe.load_lora_weights("MdEndan/stable-diffusion-lora-fine-tuned")
+pipe = DiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", safety_checker = None, requires_safety_checker = False, cache_dir=cache_dir)
+pipe.load_lora_weights("MdEndan/stable-diffusion-lora-fine-tuned", cache_dir=cache_dir)
 pipe = pipe.to("cuda")
 
 
