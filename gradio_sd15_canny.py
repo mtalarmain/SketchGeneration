@@ -298,7 +298,7 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
     else:
         num_img = 5
         gallery = gallery[-4:] + [(np.asarray(image), str(init_prompt))]
-    list_output = [gr.Gallery(columns=[num_img], value=gallery), gr.Number(value=num_img)]
+    list_output = [gr.Gallery(columns=[num_img], value=gallery, selected_index=num_img-1), gr.Number(value=num_img)]
     return list_output
 
 
