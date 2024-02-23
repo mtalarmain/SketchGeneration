@@ -56,22 +56,24 @@ def next_sentences(n, text):
     n = n + 7
     if n < len(list_text):
         stories = gr.Markdown(f""" 
-            <center>Choose one sentence to say, right in front of the camera</center>
-            Sentence 1: {list_text[n]}\n
-            Sentence 2: {list_text[n+1]}\n
-            Sentence 3: {list_text[n+2]}\n
-            Sentence 4: {list_text[n+3]}\n
+            <center>Choose one sentence to say, right in front of the camera.</center>
+            {lines[n-1]}<br>
+            Sentence 1: {list_text[n]}<br>
+            Sentence 2: {list_text[n+1]}<br>
+            Sentence 3: {list_text[n+2]}<br>
+            Sentence 4: {list_text[n+3]}<br>
             Sentence 5: {list_text[n+4]}
             """)
     else:
-        n = 37
+        n = 36
         stories = gr.Markdown(f""" 
             <center>The story is finish.</center>
-             \n
-             \n
-             \n
-             \n
-               
+             <br>
+             <br>
+             <br>
+             <br>
+             <br>
+                
             """)
     return n, stories
 
@@ -79,13 +81,14 @@ def before_sentences(n, text):
     list_text = ast.literal_eval(text)
     n = n - 7
     if n < 0:
-        n = 2
+        n = 1
     stories = gr.Markdown(f""" 
-        <center>Choose one sentence to say, right in front of the camera</center>
-        Sentence 1: {list_text[n]}\n
-        Sentence 2: {list_text[n+1]}\n
-        Sentence 3: {list_text[n+2]}\n
-        Sentence 4: {list_text[n+3]}\n
+        <center>Choose one sentence to say, right in front of the camera.</center>
+        {lines[n-1]}<br>
+        Sentence 1: {list_text[n]}<br>
+        Sentence 2: {list_text[n+1]}<br>
+        Sentence 3: {list_text[n+2]}<br>
+        Sentence 4: {list_text[n+3]}<br>
         Sentence 5: {list_text[n+4]}
         """)
     return n, stories
@@ -183,7 +186,7 @@ with gr.Blocks() as demo:
         """)
 
     list_text = gr.Textbox(lines, visible = False)
-    n = gr.Number(value=2, visible = False)
+    n = gr.Number(value=1, visible = False)
 
     with gr.Row():
         with gr.Group():
@@ -191,12 +194,13 @@ with gr.Blocks() as demo:
             b_match = gr.Button('Match sentence')
             b_match.click(match_sentence, inputs=[n, list_text, text], outputs=text)
         stories = gr.Markdown(f""" 
-            <center>Choose one sentence to say, right in front of the camera</center>
-            Sentence 1: {lines[2]}\n
-            Sentence 2: {lines[3]}\n
-            Sentence 3: {lines[4]}\n
-            Sentence 4: {lines[5]}\n
-            Sentence 5: {lines[6]}
+            <center>Choose one sentence to say, right in front of the camera.</center>
+            {lines[0]}<br>
+            Sentence 1: {lines[1]}<br>
+            Sentence 2: {lines[2]}<br>
+            Sentence 3: {lines[3]}<br>
+            Sentence 4: {lines[4]}<br>
+            Sentence 5: {lines[5]}
             """)
         gr.Markdown("""
         <center> Generated images! </center>
