@@ -382,9 +382,16 @@ with gr.Blocks() as demo:
             Sentence 4: {lines[4]}<br>
             Sentence 5: {lines[5]}
             """)
-        gr.Markdown("""
-        <center> Generated images! </center>
-        """)
+        with gr.Column():
+            gr.Markdown("""
+            <center> <img src="http://www.cvc.uab.es/wp-content/uploads/2021/05/CVC-logo-color.png" alt="CVC"> </center>
+            """)
+            gr.Markdown("""
+                 <br>
+                 <br>
+                 <br>
+                <center> Generated images! </center>
+                """)
     b_match.click(match_sentence, inputs=[n, list_text, text], outputs=[text, stories])
 
     with gr.Row():
