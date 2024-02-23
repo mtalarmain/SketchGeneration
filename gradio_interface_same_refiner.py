@@ -126,7 +126,7 @@ def text_2_sketch(prompt, steps_slider_sketch):
     image.save("generation/sketch.png")
     return image
 
-def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image, guidance_scale, style_group, gallery, num_img):
+def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, steps_slider_image, guidance_scale, style_group, gallery):
 
     # Fix seed
     seed = 42
@@ -167,28 +167,29 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
     # Refine Image to have better image quality and consistencypipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
     image = pipe_sdxl_controlnet(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image, negative_prompt=negative_prompt, num_inference_steps=steps_slider_image*strength, generator = generator, guidance_scale=guidance_scale).images[0]
     image.save(f"generation/img_refined_{name_file}.png")
-    print(len(gallery))
-    if num_img==0:
-        num_img += 1
+    if gallery is None:
         gallery = [(np.asarray(image), str(init_prompt))]
-    elif num_img<=4:
-        num_img += 1
+    elif len(gallery)<=4:
         gallery = gallery + [(np.asarray(image), str(init_prompt))]
     else:
-        num_img = 5
         gallery = gallery[-4:] + [(np.asarray(image), str(init_prompt))]
-    list_output = [gr.Gallery(columns=[num_img], value=gallery, selected_index=num_img-1), gr.Number(value=num_img)]
-    return list_output
+    return gr.Gallery(columns=[len(gallery)], value=gallery, selected_index=len(gallery)-1)
 
 def download_changes(sketch):
     composite = Image.fromarray(np.asarray(sketch['composite']))
     composite.save("generation/sketch.png")
     return composite
 
-def remove_img():
-    list_output = [gr.Gallery(value=None), gr.Number(value=0)]
-    return list_output
+# the function triggered by Gallery.select()
+def get_select_value(evt: gr.SelectData):
+    return evt.index
 
+def remove_img(gallery, num_img):
+    img = []
+    for i in range(len(gallery)):
+        if i != num_img:
+            img.append(gallery[i])
+    return img
 
 filename = 'text/stories.txt'
 with open(filename) as file:
@@ -228,7 +229,7 @@ with gr.Blocks() as demo:
         gallery = gr.Gallery(label="Generated images", columns=[1], rows=[1], interactive=True)
 
     num_img = gr.Number(value=0, visible=False)
-
+    gallery.select(get_select_value, None, num_img)
 
     with gr.Accordion("Advanced", open=False):
         style_group = gr.Radio(
@@ -306,9 +307,9 @@ with gr.Blocks() as demo:
         with gr.Group():
             with gr.Row():
                 b2 = gr.Button("Generate Image")
-                b2.click(sketch_2_image, inputs=[text, additional_positive, additional_negative, strength, steps_slider_image, guidance_scale, style_group, gallery, num_img], outputs=[gallery, num_img])
-                btn_remove = gr.Button("Remove All Images")
-                btn_remove.click(remove_img, None, [gallery, num_img])
+                b2.click(sketch_2_image, inputs=[text, additional_positive, additional_negative, strength, steps_slider_image, guidance_scale, style_group, gallery], outputs=gallery)
+                btn_remove = gr.Button("Remove Image")
+                btn_remove.click(remove_img, [gallery, num_img], gallery)
 
 
 ap = argparse.ArgumentParser()
