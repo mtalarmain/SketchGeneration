@@ -157,13 +157,13 @@ pipe.enable_xformers_memory_efficient_attention()
 #     return frame[:,:,::-1]
 
 
-def stop_recording():
-    global record, video_out
-    record = False
-    if video_out is not None:
-        print("Release video")
-        video_out.release()
-        video_out = None
+# def stop_recording():
+#     global record, video_out
+#     record = False
+#     if video_out is not None:
+#         print("Release video")
+#         video_out.release()
+#         video_out = None
 
 
 def read_lips(video) -> str:
@@ -178,7 +178,8 @@ def match_sentence(n ,text, transcription):
     print(phrases)
     phrase = process.extractOne(transcription, phrases, scorer=fuzz.ratio, processor=utils.default_process)[0]
     idx = phrases.index(phrase)
-    phrases[idx] = "<mark><b>" + phrases[idx] + "</b></mark>"
+    # phrases[idx] = "<mark><b>" + phrases[idx] + "</b></mark>"
+    phrases[idx] = '<span style="background-color: red;"><b>' + phrases[idx] + "</b></span>"
     bold_text = f""" 
             <center>Choose one sentence to say, right in front of the camera.</center>
             {all_phrases[n-1]}<br>
