@@ -56,6 +56,9 @@ class YoloMouthCrop:
             return None
         yolo_results = yolo_results[0]
 
+        if yolo_results.boxes.conf.numel() == 0:
+            return None
+
         boxes = yolo_results.boxes.xyxy.cpu().numpy()
         keypoints = yolo_results.keypoints.xy.cpu().numpy()
         if biggest:
@@ -78,9 +81,9 @@ class YoloMouthCrop:
             if crop.any():
                 crop = cv2.resize(crop, (size, size))
                 crops.append(crop)
+        if not crops:
+            return None
         if biggest:
-            if not crops:
-                return None
             return crops[0]
         return crops
 
