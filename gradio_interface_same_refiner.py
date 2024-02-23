@@ -167,6 +167,7 @@ def sketch_2_image(init_prompt, positive_prompt, negative_prompt, strength, step
     # Refine Image to have better image quality and consistencypipe_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
     image = pipe_sdxl_controlnet(prompt, controlnet_conditioning_scale=controlnet_conditioning_scale, image=canny_image, negative_prompt=negative_prompt, num_inference_steps=steps_slider_image*strength, generator = generator, guidance_scale=guidance_scale).images[0]
     image.save(f"generation/img_refined_{name_file}.png")
+    print(len(gallery))
     if num_img==0:
         num_img += 1
         gallery = [(np.asarray(image), str(init_prompt))]
