@@ -50,8 +50,20 @@ pipe = pipe.to("cuda")
 def match_sentence(n ,text, transcription):
     all_phrases = ast.literal_eval(text)
     phrases = [all_phrases[n], all_phrases[n+1], all_phrases[n+2], all_phrases[n+3], all_phrases[n+4]]
-    out = process.extractOne(transcription, phrases, scorer=fuzz.ratio, processor=utils.default_process)
-    return out[0]
+    phrase = process.extractOne(transcription, phrases, scorer=fuzz.ratio, processor=utils.default_process)[0]
+    idx = phrases.index(phrase)
+    phrases[idx] = "<mark><b>" + phrases[idx] + "</b></mark>"
+    bold_text = f""" 
+            <center>Choose one sentence to say, right in front of the camera.</center>
+            {all_phrases[n-1]}<br>
+            Sentence 1: {phrases[0]}<br>
+            Sentence 2: {phrases[1]}<br>
+            Sentence 3: {phrases[2]}<br>
+            Sentence 4: {phrases[3]}<br>
+            Sentence 5: {phrases[4]}
+            """
+    stories = gr.Markdown(bold_text)
+    return phrase, stories
 
 def next_sentences(n, text):
     list_text = ast.literal_eval(text)
@@ -194,7 +206,6 @@ with gr.Blocks() as demo:
         with gr.Group():
             text = gr.Textbox(label = 'Write the text you want to generate an image from.')
             b_match = gr.Button('Match sentence')
-            b_match.click(match_sentence, inputs=[n, list_text, text], outputs=text)
         stories = gr.Markdown(f""" 
             <center>Choose one sentence to say, right in front of the camera.</center>
             {lines[0]}<br>
@@ -207,6 +218,7 @@ with gr.Blocks() as demo:
         gr.Markdown("""
         <center> Generated images! </center>
         """)
+    b_match.click(match_sentence, inputs=[n, list_text, text], outputs=[text, stories])
 
     with gr.Row():
         sketch = gr.ImageEditor(label = 'Sketch generated from text.', image_mode='RGB', interactive=True, brush=gr.components.image_editor.Brush( colors=["rgb(0, 0, 0)"],color_mode="fixed"))
