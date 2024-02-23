@@ -1,8 +1,10 @@
 import argparse
 import ast
 import json
-from pathlib import Path
+import re
 import shutil
+from datetime import datetime
+from pathlib import Path
 
 import cv2
 import gradio as gr
@@ -15,7 +17,6 @@ from diffusers import (ControlNetModel, DiffusionPipeline,
 from PIL import Image
 from rapidfuzz import fuzz, process, utils
 from YoloMouthCrop import YoloMouthCrop
-
 
 # Constants
 generation_path = Path("/home/labo/Projects/CVC/MWC2024/SketchGeneration/generation") # Path("/opt/SketchSpeech/generation")
@@ -304,18 +305,18 @@ def download_changes(sketch):
     return composite
 
 
-# def toggle_recording():
-#     global record
-#     record = not record
-#     if not record:
-#         stop_recording()
-#         transcript = read_lips(mouth_video_path)
-#         ret_button = "Start Recording"
-#     else:
-#         transcript = ""
-#         ret_button = "Stop recording"
-
-#     return ret_button, transcript
+def save_book_images(gallery):
+    try:
+        now_str = datetime.now().strftime("%d-%m-%Y-%H-%M-%S")
+        out_path = generation_path / now_str
+        out_path.mkdir(exist_ok=True, parents=True)
+        for img_path, text in gallery:
+            # Sanitize path
+            out_img_path = out_path / (re.sub('[^a-zA-Z0-9 \n\.]', '', text) + ".png")
+            shutil.copyfile(img_path, out_img_path)
+        gr.Info(f"Book saved successfully ({now_str})")
+    except Exception as e:
+        gr.Error(f"There was an error saving the book ({e})")
 
 
 def on_stop_recording(video):
@@ -466,6 +467,8 @@ with gr.Blocks() as demo:
                 b2.click(sketch_2_image, inputs=[text, additional_positive, additional_negative, strength, steps_slider_image, guidance_scale, style_group, gallery], outputs=gallery)
                 btn_remove = gr.Button("Remove Image")
                 btn_remove.click(remove_img, [gallery, num_img], gallery)
+                btn_save = gr.Button("Save Book")
+                btn_save.click(save_book_images, gallery)
         
     # button_toggle_record = gr.Button("Start Recording")
     # button_toggle_record.click(
