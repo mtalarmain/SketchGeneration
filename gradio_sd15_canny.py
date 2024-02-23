@@ -20,7 +20,7 @@ from YoloMouthCrop import YoloMouthCrop
 # Constants
 generation_path = Path("/home/labo/Projects/CVC/MWC2024/SketchGeneration/generation") # Path("/opt/SketchSpeech/generation")
 avhubert_package_path = "/opt/SketchSpeech/av_hubert/avhubert/"
-avhubert_model_path = "/home/labo/Projects/CVC/MWC2024/large_vox_433h.pt" # "/opt/SketchSpeech/av_hubert/data/finetune-model.pt"
+avhubert_model_path = "/opt/SketchSpeech/av_hubert/data/finetune-model.pt" # "/home/labo/Projects/CVC/MWC2024/large_vox_433h.pt" # "/opt/SketchSpeech/av_hubert/data/finetune-model.pt"
 yolo_model = "/opt/SketchSpeech/av_hubert/data/yolov8n-face.pt"
 path_img_style = './prompts/'
 cache_dir = ".hf_cache/"
