@@ -193,6 +193,7 @@ def next_sentences(n, text):
             Sentence 5: {list_text[n+4]}
             """)
     else:
+        n = 37
         stories = gr.Markdown(f""" 
             <center>The story is finish.</center>
              \n
